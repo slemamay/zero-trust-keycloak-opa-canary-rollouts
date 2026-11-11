@@ -28,7 +28,7 @@ services:
     ports:
       - "8181:8181"
     volumes:
-      - ./opa:/policies
+      - ./policies:/policies
 
 volumes:
   postgres_data:
