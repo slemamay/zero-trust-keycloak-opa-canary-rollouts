@@ -1,4 +1,52 @@
 {
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "alice@test.com",
+      "firstName": "Alice",
+      "lastName": "Martin",
+      "attributes": { "agence": ["AG01"] },
+      "credentials": [{ "type": "password", "value": "Alice123!", "temporary": false }],
+      "realmRoles": ["caissier", "default-roles-projet44"]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "bob@test.com",
+      "firstName": "Bob",
+      "lastName": "Durand",
+      "attributes": { "agence": ["AG01"] },
+      "credentials": [{ "type": "password", "value": "Bob123!", "temporary": false }],
+      "realmRoles": ["manager", "default-roles-projet44"]
+    },
+    {
+      "username": "carla",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "carla@test.com",
+      "firstName": "Carla",
+      "lastName": "Benali",
+      "credentials": [{ "type": "password", "value": "Carla123!", "temporary": false }],
+      "realmRoles": ["auditeur", "default-roles-projet44"]
+    },
+    {
+      "username": "agent-ia",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "agent@test.com",
+      "firstName": "Agent",
+      "lastName": "IA",
+      "attributes": {
+        "agence": ["AG01"],
+        "agent_scopes": ["read:transactions"]
+      },
+      "credentials": [{ "type": "password", "value": "Agent123!", "temporary": false }],
+      "realmRoles": ["caissier", "default-roles-projet44"]
+    }
+  ],
   "id": "3f284b32-1809-4025-8e31-5c9dec80ee21",
   "realm": "projet44",
   "displayName": "",
