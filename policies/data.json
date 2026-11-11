@@ -1,0 +1,23 @@
+{
+  "config": {
+    "role_permissions": {
+      "caissier": ["view", "create"],
+      "manager": ["view", "create", "approve"],
+      "auditeur": ["view", "view_audit"]
+    },
+    "amount_limits": { "caissier": 1000, "manager": 50000 },
+    "amount_restricted_actions": ["create", "approve"],
+    "global_branch_roles": ["auditeur"],
+    "business_hours": {
+      "start": 8,
+      "end": 18,
+      "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      "restricted_actions": ["create", "approve"]
+    },
+    "agent_max_amount": 500,
+    "agent_scope_actions": {
+      "transactions:read": ["view"],
+      "transactions:draft": ["create"]
+    }
+  }
+}
