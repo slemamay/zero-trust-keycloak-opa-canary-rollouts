@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: projet44
       POSTGRES_PASSWORD: projet44pass
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -22,13 +22,13 @@ services:
       - "8080:8080"
 
   opa:
-    image: openpolicyagent/opa:latest
+    image: openpolicyagent/opa:1.4.2
     container_name: projet44-opa
     command: run --server --addr :8181 --watch /policies
     ports:
       - "8181:8181"
     volumes:
-      - ./opa:/policies
+      - ./policies:/policies
 
 volumes:
   postgres_data:
