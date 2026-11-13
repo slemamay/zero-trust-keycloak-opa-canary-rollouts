@@ -1,0 +1,1 @@
+# No third-party packages: stdlib only. Needs `opa` on PATH or Docker (pinned openpolicyagent/opa:1.4.2).

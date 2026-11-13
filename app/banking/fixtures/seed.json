@@ -1,0 +1,7 @@
+[
+  {"model": "banking.branch", "pk": 1, "fields": {"code": "AG01", "name": "Agence Tunis Centre"}},
+  {"model": "banking.branch", "pk": 2, "fields": {"code": "AG02", "name": "Agence Sfax"}},
+  {"model": "banking.transaction", "pk": 1, "fields": {"branch": 1, "created_by": "alice", "amount": "500.00", "description": "Petit virement", "status": "PENDING"}},
+  {"model": "banking.transaction", "pk": 2, "fields": {"branch": 1, "created_by": "alice", "amount": "50000.00", "description": "Gros virement", "status": "PENDING"}},
+  {"model": "banking.transaction", "pk": 3, "fields": {"branch": 2, "created_by": "alice", "amount": "800.00", "description": "Autre agence", "status": "PENDING"}}
+]

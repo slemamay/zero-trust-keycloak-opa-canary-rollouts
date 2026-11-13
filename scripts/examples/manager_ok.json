@@ -1,0 +1,8 @@
+{
+  "input": {
+    "subject": {"sub": "u-1", "type": "human", "roles": ["manager"], "branch": "tunis", "agent_scopes": []},
+    "resource": {"type": "transaction", "id": "t1", "branch": "tunis", "amount": 20000, "created_by": "u-9"},
+    "action": "approve",
+    "context": {"hour": 10, "weekday": "Tuesday"}
+  }
+}
