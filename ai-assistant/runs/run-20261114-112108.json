@@ -1,0 +1,21 @@
+{
+  "ts": "2026-11-14T11:21:02",
+  "requirement": "Approvals above 30000 TND are forbidden on Friday after 14:00",
+  "provider": "mock",
+  "model": "qwen2.5-coder:7b",
+  "attempts": [
+    {
+      "n": 1,
+      "reply": "```rego\npackage enterprise.candidates.friday_large_approval\n\nimport rego.v1\n\n# Compliance: approvals above 30 000 TND are blocked on Friday from 14:00.\nviolation contains \"large approval blocked on Friday afternoon\" if {\n\tinput.action == \"approve\"\n\tinput.resource.amount > 30000\n\tinput.context.weekday == \"friday\"\n\tinput.context.hour >= 14\n}\n```\n\n```rego\npackage enterprise.candidates_test.friday_large_approval\n\nimport data.enterprise.candidates.friday_large_approval as rule\nimport rego.v1\n\nbase := {\n\t\"action\": \"approve\",\n\t\"resource\": {\"amount\": 40000},\n\t\"context\": {\"weekday\": \"Friday\", \"hour\": 15},\n}\n\ntest_blocks_large_friday_afternoon if {\n\t\"large approval blocked on Friday afternoon\" in rule.violation with input as base\n}\n\ntest_allows_exact_threshold if {\n\tcount(rule.violation) == 0 with input as object.union(base, {\"resource\": {\"amount\": 30000}})\n}\n\ntest_allows_friday_morning if {\n\tcount(rule.violation) == 0 with input as object.union(base, {\"context\": {\"weekday\": \"Friday\", \"hour\": 10}})\n}\n\ntest_allows_other_weekday if {\n\tcount(rule.violation) == 0 with input as object.union(base, {\"context\": {\"weekday\": \"Tuesday\", \"hour\": 15}})\n}\n\ntest_ignores_view_action if {\n\tcount(rule.violation) == 0 with input as object.union(base, {\"action\": \"view\"})\n}\n```\n",
+      "gate": "[PASS] static\n[PASS] format\n[PASS] check\n[FAIL] tests: 22/23 passed (5 from the draft); failing: test_blocks_large_friday_afternoon",
+      "accepted": false
+    },
+    {
+      "n": 2,
+      "reply": "```rego\npackage enterprise.candidates.friday_large_approval\n\nimport rego.v1\n\n# Compliance: approvals above 30 000 TND are blocked on Friday from 14:00.\nviolation contains \"large approval blocked on Friday afternoon\" if {\n\tinput.action == \"approve\"\n\tinput.resource.amount > 30000\n\tinput.context.weekday == \"Friday\"\n\tinput.context.hour >= 14\n}\n```\n\n```rego\npackage enterprise.candidates_test.friday_large_approval\n\nimport data.enterprise.candidates.friday_large_approval as rule\nimport rego.v1\n\nbase := {\n\t\"action\": \"approve\",\n\t\"resource\": {\"amount\": 40000},\n\t\"context\": {\"weekday\": \"Friday\", \"hour\": 15},\n}\n\ntest_blocks_large_friday_afternoon if {\n\t\"large approval blocked on Friday afternoon\" in rule.violation with input as base\n}\n\ntest_allows_exact_threshold if {\n\tcount(rule.violation) == 0 with input as object.union(base, {\"resource\": {\"amount\": 30000}})\n}\n\ntest_allows_friday_morning if {\n\tcount(rule.violation) == 0 with input as object.union(base, {\"context\": {\"weekday\": \"Friday\", \"hour\": 10}})\n}\n\ntest_allows_other_weekday if {\n\tcount(rule.violation) == 0 with input as object.union(base, {\"context\": {\"weekday\": \"Tuesday\", \"hour\": 15}})\n}\n\ntest_ignores_view_action if {\n\tcount(rule.violation) == 0 with input as object.union(base, {\"action\": \"view\"})\n}\n```\n",
+      "gate": "[PASS] static\n[PASS] format\n[PASS] check\n[PASS] tests: 23/23 passed (5 from the draft)",
+      "accepted": true
+    }
+  ],
+  "accepted_rule": "friday_large_approval"
+}
