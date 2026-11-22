@@ -7,9 +7,22 @@
       "email": "alice@test.com",
       "firstName": "Alice",
       "lastName": "Martin",
-      "attributes": { "agence": ["AG01"] },
-      "credentials": [{ "type": "password", "value": "Alice123!", "temporary": false }],
-      "realmRoles": ["caissier", "default-roles-projet44"]
+      "attributes": {
+        "agence": [
+          "AG01"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Alice123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "caissier",
+        "default-roles-projet44"
+      ]
     },
     {
       "username": "bob",
@@ -18,9 +31,22 @@
       "email": "bob@test.com",
       "firstName": "Bob",
       "lastName": "Durand",
-      "attributes": { "agence": ["AG01"] },
-      "credentials": [{ "type": "password", "value": "Bob123!", "temporary": false }],
-      "realmRoles": ["manager", "default-roles-projet44"]
+      "attributes": {
+        "agence": [
+          "AG01"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Bob123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "manager",
+        "default-roles-projet44"
+      ]
     },
     {
       "username": "carla",
@@ -29,8 +55,17 @@
       "email": "carla@test.com",
       "firstName": "Carla",
       "lastName": "Benali",
-      "credentials": [{ "type": "password", "value": "Carla123!", "temporary": false }],
-      "realmRoles": ["auditeur", "default-roles-projet44"]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Carla123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "auditeur",
+        "default-roles-projet44"
+      ]
     },
     {
       "username": "agent-ia",
@@ -40,11 +75,24 @@
       "firstName": "Agent",
       "lastName": "IA",
       "attributes": {
-        "agence": ["AG01"],
-        "agent_scopes": ["read:transactions"]
+        "agence": [
+          "AG01"
+        ],
+        "agent_scopes": [
+          "transactions:read",
+          "transactions:draft"
+        ]
       },
-      "credentials": [{ "type": "password", "value": "Agent123!", "temporary": false }],
-      "realmRoles": ["caissier", "default-roles-projet44"]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Agent123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-projet44"
+      ]
     }
   ],
   "id": "3f284b32-1809-4025-8e31-5c9dec80ee21",
@@ -757,7 +805,7 @@
       "enabled": true,
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "**********",
+      "secret": "projet44-dev-secret",
       "redirectUris": [
         "http://localhost:8000/*"
       ],
@@ -769,7 +817,7 @@
       "consentRequired": false,
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
+      "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
       "publicClient": false,
       "frontchannelLogout": true,

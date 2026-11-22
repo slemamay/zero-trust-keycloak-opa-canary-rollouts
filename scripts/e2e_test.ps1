@@ -12,7 +12,8 @@ param(
   [string]$Api = "http://localhost:8000",
   [string]$Opa = "http://localhost:8181",
   [string]$Realm = "projet44",
-  [string]$Secret = "projet44-dev-secret"
+  [string]$Secret = "projet44-dev-secret",
+  [switch]$RestartOpa   # use if OPA --watch does not see host edits (Docker Desktop/Windows)
 )
 
 $Root = Split-Path -Parent $PSScriptRoot
@@ -49,6 +50,13 @@ function Opa-Decision($inputObj) {
   (Invoke-RestMethod -Method Post -Uri "$Opa/v1/data/enterprise/authz/decision" -ContentType "application/json" -Body $json).result
 }
 
+function Settle {
+  if ($RestartOpa) {
+    Push-Location $Root; docker compose restart opa | Out-Null; Pop-Location
+    Wait-Opa | Out-Null
+  } else { Start-Sleep 4 }
+}
+
 function Wait-Opa {
   for ($i = 0; $i -lt 30; $i++) {
     try { Invoke-RestMethod -Uri "$Opa/health" | Out-Null; return $true } catch { Start-Sleep 1 }
@@ -62,6 +70,13 @@ if ($Root -match "OneDrive") {
 
 # ---------------------------------------------------------------- preflight
 Write-Host "`n== Preflight ==" -ForegroundColor Cyan
+Write-Host "Waiting for Keycloak realm '$Realm' (up to 3 min)..."
+$kcReady = $false
+for ($i = 0; $i -lt 90 -and -not $kcReady; $i++) {
+  try { Invoke-RestMethod -Uri "$KC/realms/$Realm/.well-known/openid-configuration" | Out-Null; $kcReady = $true }
+  catch { Start-Sleep 2 }
+}
+if (-not $kcReady) { Write-Host "ABORT: Keycloak not ready. Check: docker compose logs keycloak --tail 30" -ForegroundColor Red; exit 2 }
 $bob = Get-Token "bob" "Bob123!"
 $pre = Call-Api "POST" "/transactions/1/approve/" $bob
 if ($pre.code -eq 403 -and $pre.body -match "hours") {
@@ -106,13 +121,13 @@ try {
     Check "hot-swap: exactly one '50000' in data.json" $false "edit manually, see scripts/hot_swap_demo.md"
   } else {
     [IO.File]::WriteAllText($DataJson, $original.Replace("50000", "10000"), (New-Object Text.UTF8Encoding($false)))
-    Start-Sleep 4
+    Settle
     $r = Call-Api "POST" "/transactions/2/approve/" (Get-Token "bob" "Bob123!")
     Check "after limit 50000 -> 10000: same request now 403" ($r.code -eq 403) "got $($r.code) $($r.body)"
   }
 } finally {
   [IO.File]::WriteAllText($DataJson, $original, (New-Object Text.UTF8Encoding($false)))
-  Start-Sleep 4
+  Settle
 }
 $r = Call-Api "POST" "/transactions/2/approve/" (Get-Token "bob" "Bob123!")
 Check "after restoring data.json: 200 again" ($r.code -eq 200) "got $($r.code) $($r.body)"
@@ -155,12 +170,12 @@ try {
   Check "assistant exits 0 (a draft was accepted)" ($LASTEXITCODE -eq 0) $out
   Check "attempt 1 rejected by the gate, attempt 2 accepted" ($out -match "REJECTED" -and $out -match "ACCEPTED")
   Check "accepted rule file written" (Test-Path (Join-Path $CandDir "friday_large_approval.rego"))
-  Start-Sleep 4
+  Settle
   $after = Opa-Decision $fridayInput
   Check "after AI rule: same input is denied with the new reason" ($after.allow -eq $false -and ($after.reasons -join " ") -match "Friday") ($after | ConvertTo-Json -Compress)
 } finally {
   Remove-Item (Join-Path $CandDir "*.rego") -ErrorAction SilentlyContinue
-  Start-Sleep 4
+  Settle
 }
 $restored = Opa-Decision $fridayInput
 Check "after removing the rule: allowed again" ($restored.allow -eq $true)

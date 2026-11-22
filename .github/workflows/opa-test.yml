@@ -1,0 +1,43 @@
+name: opa-policy-gate
+
+on:
+  push:
+    paths: ["policies/**", "ai-assistant/**", ".github/workflows/opa-test.yml"]
+  pull_request:
+    paths: ["policies/**", "ai-assistant/**", ".github/workflows/opa-test.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OPA_VERSION: "1.4.2"
+  OPA_SHA256: "2c0ccdbbe0b8e2a5d12d9c42d92f1f34f494ffb32d1f3c4ddc36101be637d66f"
+
+jobs:
+  rego-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OPA (pinned version + checksum)
+        run: |
+          curl -fsSL -o opa "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+          echo "${OPA_SHA256}  opa" | sha256sum -c -
+          chmod +x opa && sudo mv opa /usr/local/bin/opa
+          opa version
+
+      - name: opa fmt (must be already formatted)
+        run: opa fmt --list --fail policies/
+
+      - name: opa check (strict)
+        run: opa check --strict policies/
+
+      - name: opa test (all policies, coverage >= 90%)
+        run: opa test policies/ -v --threshold 90
+
+      - name: Gate self-tests (AI assistant accepts good drafts, rejects bad/unsafe ones)
+        run: python3 -m unittest discover -s ai-assistant -v
+
+      - name: Offline AI demo (reject then accept, dry-run)
+        run: python3 ai-assistant/assistant.py "Block approvals above 30000 TND on Friday after 14:00" --provider mock --dry-run

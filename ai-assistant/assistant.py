@@ -9,6 +9,7 @@ import argparse
 import json
 import re
 import sys
+import urllib.error
 from datetime import datetime
 from pathlib import Path
 
@@ -64,7 +65,21 @@ def main():
 
     for n in range(1, a.max_attempts + 1):
         print(f"\n=== Attempt {n}/{a.max_attempts}: asking {a.provider} ===")
-        reply = chat(msgs, a.model)
+        try:
+            reply = chat(msgs, a.model)
+        except Exception as e:  # message clair au lieu d'une trace de 40 lignes
+            print(f"\nERREUR : le fournisseur '{a.provider}' n'a pas répondu ({type(e).__name__}).")
+            if isinstance(e, KeyError) and "LLM_API_KEY" in str(e):
+                print("-> La variable LLM_API_KEY n'est pas définie dans ce terminal.")
+            elif isinstance(e, urllib.error.HTTPError):
+                body = e.read().decode("utf-8", "replace")[:300]
+                print(f"-> HTTP {e.code} : {body}")
+                print("-> 400/403 : clé invalide. 404 : nom de modèle ou URL incorrect. 429 : limite atteinte, attendre.")
+            elif a.provider == "ollama":
+                print("-> Ollama ne répond pas sur localhost:11434. Lancez Ollama, ou utilisez --provider mock (démo hors ligne) ou --provider openai (clé API).")
+            else:
+                print(f"-> {e}")
+            sys.exit(2)
         rule, tests = extract_blocks(reply)
         if rule is None:
             report, res = "[FAIL] parse: expected two fenced code blocks (rule, tests)", None
