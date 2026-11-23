@@ -32,11 +32,15 @@ function Get-Token($user, $pwd) {
     username = $user; password = $pwd }).access_token
 }
 
-function Call-Api($method, $path, $token) {
+function Call-Api($method, $path, $token, $body = $null) {
   $h = @{}
   if ($token) { $h["Authorization"] = "Bearer $token" }
   try {
-    $r = Invoke-WebRequest -Method $method -Uri "$Api$path" -Headers $h -UseBasicParsing
+    if ($null -ne $body) {
+      $r = Invoke-WebRequest -Method $method -Uri "$Api$path" -Headers $h -UseBasicParsing -ContentType "application/json" -Body ($body | ConvertTo-Json -Compress)
+    } else {
+      $r = Invoke-WebRequest -Method $method -Uri "$Api$path" -Headers $h -UseBasicParsing
+    }
     return @{ code = [int]$r.StatusCode; body = $r.Content }
   } catch {
     $code = 0
@@ -112,6 +116,24 @@ $r = Call-Api "GET" "/transactions/" (Get-Token "carla" "Carla123!")
 Check "carla (auditeur) can list transactions -> 200" ($r.code -eq 200) "got $($r.code)"
 $r = Call-Api "GET" "/transactions/" (Get-Token "bob" "Bob123!")
 Check "bob can list transactions -> 200" ($r.code -eq 200) "got $($r.code)"
+
+# ---------------------------------------------------------------- create (RBAC + ABAC on a new resource)
+# NB: each run inserts a few PENDING rows (harmless; reset with `manage.py loaddata banking/fixtures/seed.json`).
+Write-Host "`n== Creation: POST /transactions/create/ ==" -ForegroundColor Cyan
+$alice = Get-Token "alice" "Alice123!"
+$r = Call-Api "POST" "/transactions/create/" $alice @{ branch = "AG01"; amount = 500; description = "e2e" }
+Check "alice (caissier) creates 500 TND in AG01 -> 201" ($r.code -eq 201) "got $($r.code) $($r.body)"
+$r = Call-Api "POST" "/transactions/create/" $alice @{ branch = "AG01"; amount = 1500 }
+Check "alice creates 1500 TND (cashier limit 1000) -> 403 amount" ($r.code -eq 403 -and $r.body -match "amount") "got $($r.code) $($r.body)"
+$r = Call-Api "POST" "/transactions/create/" $alice @{ branch = "AG02"; amount = 100 }
+Check "alice creates in another branch (AG02) -> 403 branch" ($r.code -eq 403 -and $r.body -match "branch") "got $($r.code) $($r.body)"
+$agent = Get-Token "agent-ia" "Agent123!"
+$r = Call-Api "POST" "/transactions/create/" $agent @{ amount = 200 }
+Check "agent-ia drafts 200 TND (scope transactions:draft) -> 201" ($r.code -eq 201) "got $($r.code) $($r.body)"
+$r = Call-Api "POST" "/transactions/create/" $agent @{ amount = 900 }
+Check "agent-ia drafts 900 TND (agent cap 500) -> 403 amount" ($r.code -eq 403 -and $r.body -match "amount") "got $($r.code) $($r.body)"
+$r = Call-Api "POST" "/transactions/create/" (Get-Token "carla" "Carla123!") @{ branch = "AG01"; amount = 100 }
+Check "carla (auditeur) cannot create -> 403" ($r.code -eq 403) "got $($r.code) $($r.body)"
 
 # ---------------------------------------------------------------- hot swap
 Write-Host "`n== Hot-swap: edit data.json, no Django restart ==" -ForegroundColor Cyan

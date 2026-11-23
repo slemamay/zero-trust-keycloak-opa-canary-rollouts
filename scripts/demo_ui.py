@@ -64,7 +64,7 @@ def get_token(user):
     return jwt
 
 
-def call(user, action, tx, mode):
+def call(user, action, tx, mode, amount=None):
     if user not in USERS:
         return {"error": "utilisateur inconnu"}
     jwt, claims = None, None
@@ -80,9 +80,11 @@ def call(user, action, tx, mode):
         if mode == "tampered":
             jwt = jwt[:-4] + "AAAA"
     method, path = {"whoami": ("GET", "/whoami/"), "list": ("GET", "/transactions/"),
-                    "approve": ("POST", f"/transactions/{int(tx)}/approve/")}[action]
+                    "approve": ("POST", f"/transactions/{int(tx)}/approve/"),
+                    "create": ("POST", "/transactions/create/")}[action]
+    body_out = {"amount": amount} if action == "create" else None
     headers = {"Authorization": f"Bearer {jwt}"} if jwt else {}
-    st, txt = http(method, API + path, headers=headers)
+    st, txt = http(method, API + path, body=body_out, headers=headers)
     try:
         body = json.loads(txt)
     except ValueError:
@@ -125,7 +127,7 @@ def set_limit(value):
     new, n = re.subn(r'("amount_limits"\s*:\s*\{[^}]*"manager"\s*:\s*)\d+', lambda m: m.group(1) + str(value), txt, count=1)
     if n != 1:
         raise ValueError("limite manager introuvable dans data.json")
-    DATA_JSON.write_text(new, encoding="utf-8")
+    DATA_JSON.write_text(new, encoding="utf-8", newline="\n")
     ok, secs = reload_opa()
     return {"limit": read_limit(), "opa_ok": ok, "seconds": secs}
 
@@ -136,16 +138,21 @@ def opa_ctl(action):
     return {"opa_up": http("GET", OPA + "/health", timeout=2)[0] == 200 if action == "start" and wait_opa() else False}
 
 
+def llm_info():
+    base = os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1")
+    host = urllib.parse.urlparse(base).netloc
+    local = urllib.parse.urlparse(base).hostname in ("localhost", "127.0.0.1", "::1")
+    return {"host": host, "model": os.environ.get("LLM_MODEL") or "qwen2.5-coder:7b",
+            "key_missing": (not local) and not os.environ.get("LLM_API_KEY")}
+
+
 def candidates():
     return sorted(p.stem for p in CAND.glob("*.rego") if not p.stem.endswith("_test")) if CAND.exists() else []
 
 
-def run_assistant(req, provider, model):
-    if provider == "openai":
-        model = os.environ.get("LLM_MODEL") or "gemini-3.8-flash"
+def run_assistant(req, provider):
     env = os.environ.copy()
-    env.setdefault("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
-    cmd = [sys.executable, str(ROOT / "ai-assistant" / "assistant.py"), req, "--provider", provider, "--model", model]
+    cmd = [sys.executable, str(ROOT / "ai-assistant" / "assistant.py"), req, "--provider", provider]
     p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=300, env=env)
     out = (p.stdout + p.stderr).strip()
     res = {"output": out, "accepted": p.returncode == 0}
@@ -210,7 +217,7 @@ class H(BaseHTTPRequestHandler):
             if self.path == "/api/audit":
                 return self.send(audit())
             if self.path == "/api/state":
-                return self.send({"limit": read_limit(), "candidates": candidates()})
+                return self.send({"limit": read_limit(), "candidates": candidates(), "llm": llm_info()})
             self.send({"error": "not found"}, 404)
         except Exception as e:
             self.send({"error": str(e)}, 500)
@@ -220,13 +227,13 @@ class H(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
             b = json.loads(self.rfile.read(n) or b"{}")
             if self.path == "/api/call":
-                return self.send(call(b.get("user"), b.get("action"), b.get("id", 1), b.get("token", "valid")))
+                return self.send(call(b.get("user"), b.get("action"), b.get("id", 1), b.get("token", "valid"), b.get("amount")))
             if self.path == "/api/limit":
                 return self.send(set_limit(b["value"]))
             if self.path == "/api/opa":
                 return self.send(opa_ctl("start" if b.get("on") else "stop"))
             if self.path == "/api/assistant":
-                return self.send(run_assistant(b["requirement"], b.get("provider", "mock"), b.get("model", "qwen2.5-coder:7b")))
+                return self.send(run_assistant(b["requirement"], b.get("provider", "openai")))
             if self.path == "/api/remove-rule":
                 return self.send(remove_rules())
             if self.path == "/api/friday":
@@ -282,7 +289,10 @@ details summary{cursor:pointer;color:var(--red);font-weight:600;margin:6px 0}
    <button onclick="act('approve',2)">Approuver #2 (50 000 TND, AG01)</button>
    <button onclick="act('approve',3)">Approuver #3 (800 TND, AG02)</button>
    <button onclick="act('list')">Voir les transactions visibles</button>
-   <button onclick="act('whoami')">Qui suis-je ? (identité du jeton)</button></div></div>
+   <button onclick="act('whoami')">Qui suis-je ? (identité du jeton)</button></div>
+  <div class="hint" style="margin:10px 0 4px">Créer une opération (agence du jeton, montant en TND)</div>
+  <div style="display:flex;gap:8px"><input type="number" id="amt" value="500" min="1" style="flex:1"><button class="primary" onclick="act('create',0)">Créer</button></div>
+  <div class="hint" style="margin-top:4px">Essayez 500, 1 500 (&gt; plafond caissier 1 000) ou, avec agent-ia, 900 (&gt; plafond agent 500).</div></div>
  <div class="card"><h2>3. Ce qui se passe</h2>
   <div class="steps"><div class="step na" id="s1">① Jeton<br>Keycloak</div><div class="step na" id="s2">② Vérif. JWT<br>Django (PEP)</div><div class="step na" id="s3">③ Décision<br>OPA (PDP)</div><div class="step na" id="s4">④ Journal<br>d'audit</div></div>
   <div class="verdict" id="verdict">En attente</div>
@@ -307,7 +317,8 @@ details summary{cursor:pointer;color:var(--red);font-weight:600;margin:6px 0}
  <div class="card"><h2>Assistant IA de politiques</h2>
   <div class="sub">Exigence en texte libre &rarr; règle Rego &rarr; porte de tests OPA</div>
   <textarea id="req">Approvals above 30000 TND are forbidden on Friday after 14:00</textarea>
-  <select id="prov" style="margin:6px 0"><option value="mock">Démo hors ligne (brouillons préparés)</option><option value="ollama">Ollama local (LLM réel)</option><option value="openai">Gemini / API (clé dans LLM_API_KEY)</option></select>
+  <select id="prov" style="margin:6px 0"><option value="openai">LLM réel (API compatible OpenAI)</option><option value="mock">Démo hors ligne (brouillons préparés)</option></select>
+  <div class="hint" id="llmhint"></div>
   <button class="primary" id="aibtn" onclick="runAI()">Générer et tester</button>
   <pre id="aiout" style="max-height:170px;margin-top:8px;display:none"></pre>
   <div id="aistate" class="hint" style="margin-top:6px"></div>
@@ -329,11 +340,12 @@ function steps(a,v){const s=["na","na","na","na"];
  else if(v.status===0){s[0]=v.stage==="keycloak"?"bad":"ok";s[1]=v.stage==="keycloak"?"na":"bad"}
  else if(v.status===401){s[0]="ok";s[1]="bad"}
  else if(a==="whoami"){s[0]="ok";s[1]="ok"}
- else if(v.status===200){s.fill("ok")}
+ else if(v.status===200||v.status===201){s.fill("ok")}
+ else if(v.status===400){s[0]="ok";s[1]="ok"}
  else if(v.status===403||v.status===503){s[0]="ok";s[1]="ok";s[2]="bad";s[3]="ok"}
  s.forEach((c,i)=>$("s"+(i+1)).className="step "+c)}
 async function act(a,id){document.querySelectorAll("button").forEach(b=>b.disabled=true);
- let v;try{v=await j("/api/call",{user,action:a,id,token:mode})}catch(e){v={status:0,error:String(e)}}
+ let v;try{v=await j("/api/call",{user,action:a,id,token:mode,amount:+$("amt").value})}catch(e){v={status:0,error:String(e)}}
  document.querySelectorAll("button").forEach(b=>b.disabled=false);v.mode=mode;render(a,id,v);loadAudit()}
 function render(a,id,v){steps(a,v);const V=$("verdict");let cls="",t="",w="";const rs=(v.body&&v.body.reasons)||[];
  const who=v.claims?`${v.claims.username} (${(v.claims.roles.join(", ")||"agent IA")}${v.claims.agence?", "+v.claims.agence:""})`:user;
@@ -341,6 +353,8 @@ function render(a,id,v){steps(a,v);const V=$("verdict");let cls="",t="",w="";con
  else if(v.status===401){cls="warn";t="🔒 NON AUTHENTIFIÉ (401)";w=v.mode==="none"?"Aucun jeton : Django refuse la requête.":"La signature du jeton est invalide : Django refuse avant même d'appeler OPA."}
  else if(v.status===503){cls="bad";t="⛔ OPA INJOIGNABLE";w="Le moteur de décision est arrêté : par sécurité, tout est refusé (fail-closed)."}
  else if(v.status===403){cls="bad";t="✖ REFUSÉ (403)";w="OPA a refusé : "+(rs.map(fr).join(" ; ")||"refus par la politique")+"."}
+ else if(v.status===201){cls="ok";t="✔ OPÉRATION CRÉÉE (201)";const bb=v.body||{};w=`${who} a créé l'opération #${bb.id} de ${bb.amount} TND (${bb.branch}), en attente d'approbation : rôle ou scope, agence, plafond et heures sont conformes.`}
+ else if(v.status===400){cls="warn";t="Requête invalide (400)";w=(v.body&&v.body.error)||"Requête refusée avant la décision d'OPA."}
  else if(v.status===200){cls="ok";
   if(a==="approve"){t="✔ AUTORISÉ (200)";w=`${who} a approuvé la transaction #${id} : rôle, agence, montant, heures et séparation des tâches sont conformes.`}
   else if(a==="whoami"){t="✔ IDENTITÉ VÉRIFIÉE";w="Django a vérifié la signature avec les clés publiques de Keycloak (JWKS) : aucun appel à OPA, aucune session."}
@@ -352,6 +366,7 @@ function render(a,id,v){steps(a,v);const V=$("verdict");let cls="",t="",w="";con
  $("extra").innerHTML=x;$("tech").textContent=`${v.request||""}\nHTTP ${v.status}\n`+JSON.stringify(v.body,null,1)}
 async function loadAudit(){try{const a=await j("/api/audit");$("audit").innerHTML=a.map(e=>`<tr><td>${e.ts}</td><td>${e.user}</td><td>${e.action}</td><td>${e.tx??""}</td><td><span class="tag ${e.decision}">${e.decision}</span></td><td>${(e.reasons||[]).map(fr).join(" ; ")}</td></tr>`).join("")}catch(e){}}
 async function loadState(){const s=await j("/api/state");$("limit").textContent=s.limit==null?"?":s.limit.toLocaleString("fr-FR");
+ $("llmhint").textContent=s.llm.key_missing?("⚠ LLM_API_KEY non défini dans ce terminal ("+s.llm.host+")"):("Modèle : "+s.llm.model+" · serveur : "+s.llm.host);
  $("aistate").textContent=s.candidates.length?"Règle IA active : "+s.candidates.join(", "):"Aucune règle IA active."}
 async function loadStatus(){try{const s=await j("/api/status");for(const k of["keycloak","opa","django"])$("p-"+k).className="pill "+(s[k]?"up":"down");opaOn=s.opa;$("opabtn").textContent=opaOn?"Arrêter OPA (simuler une panne)":"Redémarrer OPA"}catch(e){}}
 async function setLimit(v){$("limitmsg").textContent="Rechargement d'OPA...";const r=await j("/api/limit",{value:v});

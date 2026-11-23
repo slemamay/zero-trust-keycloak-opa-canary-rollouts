@@ -105,8 +105,8 @@ def run_gate(rule_src, test_src):
         shutil.copytree(POLICIES, tmp)
         cand = tmp / "candidates"
         cand.mkdir(exist_ok=True)
-        (cand / f"{name}.rego").write_text(rule_src, encoding="utf-8")
-        (cand / f"{name}_test.rego").write_text(test_src, encoding="utf-8")
+        (cand / f"{name}.rego").write_text(rule_src, encoding="utf-8", newline="\n")
+        (cand / f"{name}_test.rego").write_text(test_src, encoding="utf-8", newline="\n")
 
         p = run_opa(["fmt", "-w", f"candidates/{name}.rego", f"candidates/{name}_test.rego"], tmp)
         res.stages.append(Stage("format", p.returncode == 0, (p.stderr or p.stdout).strip()[:400]))
@@ -141,10 +141,13 @@ def run_gate(rule_src, test_src):
 
 
 def install(res):
-    """Write an accepted draft into policies/candidates/ (OPA --watch reloads it)."""
+    """Write an accepted draft into policies/candidates/ (OPA --watch reloads it).
+
+    LF newlines on purpose: on Windows write_text would emit CRLF and
+    `opa fmt --fail` (CI, Linux) would then reject the file."""
     assert res.accepted
     dest = POLICIES / "candidates"
     dest.mkdir(exist_ok=True)
-    (dest / f"{res.name}.rego").write_text(res.rule_src, encoding="utf-8")
-    (dest / f"{res.name}_test.rego").write_text(res.test_src, encoding="utf-8")
+    (dest / f"{res.name}.rego").write_text(res.rule_src, encoding="utf-8", newline="\n")
+    (dest / f"{res.name}_test.rego").write_text(res.test_src, encoding="utf-8", newline="\n")
     return dest / f"{res.name}.rego"

@@ -85,6 +85,37 @@ class PepTests(unittest.TestCase):
         self.assertIsNotNone(err)
 
 
+class CreatePayloadTests(unittest.TestCase):
+    def parse(self, obj, default="AG01"):
+        return pep.parse_create_payload(json.dumps(obj).encode(), default)
+
+    def test_valid_payload_defaults_to_token_branch(self):
+        p, err = self.parse({"amount": 500})
+        self.assertIsNone(err)
+        self.assertEqual((p["branch"], str(p["amount"])), ("AG01", "500.00"))
+
+    def test_explicit_branch_wins_over_token_branch(self):
+        p, _ = self.parse({"amount": "12.5", "branch": "AG02"})
+        self.assertEqual(p["branch"], "AG02")
+
+    def test_invalid_amounts_rejected(self):
+        for bad in (0, -5, "abc", None, True, "NaN", "Infinity", 1e30, 0.001):
+            self.assertIsNotNone(self.parse({"amount": bad})[1], bad)
+
+    def test_missing_branch_rejected(self):
+        self.assertEqual(self.parse({"amount": 10}, default=None)[1], "agence manquante")
+
+    def test_bad_json_rejected(self):
+        self.assertIsNotNone(pep.parse_create_payload(b"not json", "AG01")[1])
+        self.assertIsNotNone(pep.parse_create_payload(b"[1,2]", "AG01")[1])
+
+    def test_create_resource_shape(self):
+        p, _ = self.parse({"amount": 200})
+        r = pep.build_create_resource(p, "alice")
+        self.assertEqual(r, {"type": "transaction", "id": "new", "branch": "AG01",
+                             "amount": 200.0, "created_by": "alice"})
+
+
 class ConfigConsistencyTests(unittest.TestCase):
     """Garde-fou : Keycloak (realm-export.json) et OPA (data.json) doivent parler la meme langue."""
 

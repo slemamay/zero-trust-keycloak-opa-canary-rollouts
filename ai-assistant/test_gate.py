@@ -31,5 +31,22 @@ class GateTests(unittest.TestCase):
         self.assertEqual(r.stages[0].name, "static")
 
 
+class InstallTests(unittest.TestCase):
+    def test_install_writes_lf_only(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            old = gate.POLICIES
+            gate.POLICIES = Path(d)
+            try:
+                res = gate.GateResult(name="demo_rule", rule_src="package x\nviolation := 1\n",
+                                      test_src="package y\ntest_a := 1\n",
+                                      stages=[gate.Stage("static", True)])
+                path = gate.install(res)
+                for f in (path, path.with_name("demo_rule_test.rego")):
+                    self.assertNotIn(b"\r", f.read_bytes(), f.name)
+            finally:
+                gate.POLICIES = old
+
+
 if __name__ == "__main__":
     unittest.main()

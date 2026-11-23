@@ -10,12 +10,14 @@ import os
 import urllib.error
 import urllib.request
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
 OPA_URL = os.getenv("OPA_URL", "http://localhost:8181")
 OPA_DECISION_PATH = os.getenv("OPA_DECISION_PATH", "/v1/data/enterprise/authz/decision")
 OPA_TIMEOUT = float(os.getenv("OPA_TIMEOUT", "2"))
 TZ = ZoneInfo(os.getenv("AUTHZ_TZ", "Africa/Tunis"))
+MAX_AMOUNT = Decimal("9999999999.99")  # banking.Transaction.amount : max_digits=12, decimal_places=2
 
 
 def build_subject(identity: dict) -> dict:
@@ -59,6 +61,45 @@ def build_resource(transaction) -> dict:
         "branch": transaction.branch.code,
         "amount": float(transaction.amount),
         "created_by": transaction.created_by,
+    }
+
+
+def parse_create_payload(body: bytes, default_branch=None):
+    """Valide le corps JSON de POST /transactions/create/ (sans Django).
+
+    Retourne (payload, None) ou (None, message_d_erreur). L'agence par défaut
+    est celle du token : un caissier ou l'agent IA peut l'omettre.
+    """
+    try:
+        data = json.loads(body or b"{}")
+    except ValueError:
+        return None, "corps JSON invalide"
+    if not isinstance(data, dict):
+        return None, "corps JSON invalide"
+    branch = data.get("branch") or default_branch
+    if not isinstance(branch, str) or not branch:
+        return None, "agence manquante"
+    try:
+        amount = Decimal(str(data.get("amount")))
+    except InvalidOperation:
+        return None, "montant invalide"
+    if not amount.is_finite() or amount <= 0 or amount > MAX_AMOUNT:
+        return None, "montant invalide"
+    amount = amount.quantize(Decimal("0.01"))
+    if amount <= 0:
+        return None, "montant invalide"
+    return {"branch": branch, "amount": amount,
+            "description": str(data.get("description") or "")[:200]}, None
+
+
+def build_create_resource(payload: dict, created_by: str) -> dict:
+    """Ressource 'à créer' envoyée à OPA (la transaction n'existe pas encore)."""
+    return {
+        "type": "transaction",
+        "id": "new",
+        "branch": payload["branch"],
+        "amount": float(payload["amount"]),
+        "created_by": created_by,
     }
 
 

@@ -27,5 +27,18 @@ Direct Access Grant is enabled only so `scripts/demo.sh` can fetch tokens with c
     docker run --rm -v "${PWD}/policies:/policies" openpolicyagent/opa:1.4.2 test /policies -v
     cd app && python -m unittest authz.tests && python manage.py test authn banking
 
+## API
+| Method | Path | Authorization |
+|---|---|---|
+| GET | `/whoami/` | valid JWT |
+| GET | `/transactions/` | valid JWT; rows filtered one by one through OPA (`view`); 503 if OPA is down |
+| POST | `/transactions/create/` | OPA `create` (role, branch, amount limit, business hours, agent `transactions:draft` scope). Body: `{"branch": "AG01", "amount": 500, "description": "..."}` (`branch` defaults to the token's branch) |
+| POST | `/transactions/<id>/approve/` | OPA `approve` (adds: not your own transaction) |
+
+## Benchmark
+    python scripts/benchmark_pep.py            # PEP -> OPA, 100 requests (allow + deny)
+    python scripts/benchmark_pep.py --e2e      # + HTTP through Django (Keycloak and Django must be running)
+Results are printed as a table and saved in `docs/benchmark.json`.
+
 ## Demo
 See `scripts/demo.sh` and `scripts/hot_swap_demo.md`. Policies are in `policies/` (OPA reloads on save, no Django restart).

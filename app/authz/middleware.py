@@ -7,7 +7,7 @@ Fail-closed : vue non déclarée => refus ; OPA injoignable => 503.
 from django.http import JsonResponse
 
 from authn.jwks import extract_identity, verify_token
-from banking.models import Transaction
+from banking.models import Branch, Transaction
 
 from . import audit, pep
 
@@ -15,6 +15,7 @@ from . import audit, pep
 # sauf celles listées dans AUTHENTICATED_ONLY.
 PROTECTED = {
     "transaction_approve": ("approve", "transaction"),
+    "transaction_create": ("create", "transaction"),
 }
 # JWT valide suffit ; la liste est filtrée ligne par ligne via OPA dans la vue
 AUTHENTICATED_ONLY = {"whoami", "transactions_list"}
@@ -57,12 +58,22 @@ class PolicyEnforcementMiddleware:
             return JsonResponse({"error": "interdit"}, status=403)
 
         action, _rtype = PROTECTED[name]
-        try:
-            tx = Transaction.objects.select_related("branch").get(pk=view_kwargs["pk"])
-        except Transaction.DoesNotExist:
-            return JsonResponse({"error": "introuvable"}, status=404)
-
-        resource = pep.build_resource(tx)
+        if action == "create":
+            # La ressource n'existe pas encore : on la construit depuis le corps
+            # de la requête (agence + montant), puis OPA décide.
+            payload, err = pep.parse_create_payload(request.body, identity.get("branch"))
+            if err:
+                return JsonResponse({"error": err}, status=400)
+            if not Branch.objects.filter(code=payload["branch"]).exists():
+                return JsonResponse({"error": "agence inconnue"}, status=400)
+            request.tx_payload = payload
+            resource = pep.build_create_resource(payload, subject["sub"])
+        else:
+            try:
+                tx = Transaction.objects.select_related("branch").get(pk=view_kwargs["pk"])
+            except Transaction.DoesNotExist:
+                return JsonResponse({"error": "introuvable"}, status=404)
+            resource = pep.build_resource(tx)
         allow, reasons, ctx, error = pep.decide(subject, action, resource)
         audit.log_decision(subject=subject, action=action, resource=resource,
                            context=ctx, allow=allow, reasons=reasons,

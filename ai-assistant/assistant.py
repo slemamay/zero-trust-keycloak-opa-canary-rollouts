@@ -2,11 +2,13 @@
 """AI policy assistant: compliance requirement (plain text) -> candidate Rego -> deterministic gate.
 
 Usage:
-  python ai-assistant/assistant.py "Block approvals above 30000 TND on Friday after 14:00" --provider ollama --model qwen2.5-coder:7b
-  python ai-assistant/assistant.py "<requirement>" --provider mock          # offline demo
+  Any OpenAI-compatible LLM, configured with LLM_BASE_URL / LLM_MODEL / LLM_API_KEY (see llm.py), e.g. local Ollama (default):
+  python ai-assistant/assistant.py "Block approvals above 30000 TND on Friday after 14:00"        # real LLM
+  python ai-assistant/assistant.py "<requirement>" --provider mock                                  # offline demo
 """
 import argparse
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -49,24 +51,26 @@ def extract_blocks(text):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("requirement")
-    ap.add_argument("--provider", default="ollama", choices=["ollama", "openai", "mock"])
-    ap.add_argument("--model", default="qwen2.5-coder:7b")
+    ap.add_argument("--provider", default="openai", choices=["openai", "mock"], help="openai = any OpenAI-compatible API (LLM_BASE_URL), mock = canned drafts, no network")
+    ap.add_argument("--model", default=None, help="default: $LLM_MODEL or " + llm.DEFAULT_MODEL)
     ap.add_argument("--max-attempts", type=int, default=3)
     ap.add_argument("--mock-script", default=None, help="e.g. draft_1_rejected,draft_2_accepted")
     ap.add_argument("--dry-run", action="store_true", help="validate but do not install the rule")
     a = ap.parse_args()
 
+    model = a.model or os.environ.get("LLM_MODEL") or llm.DEFAULT_MODEL
     chat = llm.get_client(a.provider, a.mock_script)
     msgs = [{"role": "system", "content": SYSTEM},
             {"role": "user", "content": f"Compliance requirement:\n{a.requirement}"}]
     log = {"ts": datetime.now().isoformat(timespec="seconds"), "requirement": a.requirement,
-           "provider": a.provider, "model": a.model, "attempts": []}
+           "provider": a.provider, "model": model,
+           "endpoint": None if a.provider == "mock" else os.environ.get("LLM_BASE_URL", llm.DEFAULT_BASE), "attempts": []}
     accepted = None
 
     for n in range(1, a.max_attempts + 1):
         print(f"\n=== Attempt {n}/{a.max_attempts}: asking {a.provider} ===")
         try:
-            reply = chat(msgs, a.model)
+            reply = chat(msgs, model)
         except Exception as e:  # message clair au lieu d'une trace de 40 lignes
             print(f"\nERREUR : le fournisseur '{a.provider}' n'a pas répondu ({type(e).__name__}).")
             if isinstance(e, KeyError) and "LLM_API_KEY" in str(e):
@@ -74,9 +78,9 @@ def main():
             elif isinstance(e, urllib.error.HTTPError):
                 body = e.read().decode("utf-8", "replace")[:300]
                 print(f"-> HTTP {e.code} : {body}")
-                print("-> 400/403 : clé invalide. 404 : nom de modèle ou URL incorrect. 429 : limite atteinte, attendre.")
-            elif a.provider == "ollama":
-                print("-> Ollama ne répond pas sur localhost:11434. Lancez Ollama, ou utilisez --provider mock (démo hors ligne) ou --provider openai (clé API).")
+                print("-> 400/403 : clé invalide. 404 : nom de modèle ou URL incorrect. 429/503 : service saturé, réessayer ou changer de modèle.")
+            elif isinstance(e, urllib.error.URLError):
+                print("-> Pas de connexion à l'API. Vérifiez Internet, ou utilisez --provider mock (démo hors ligne).")
             else:
                 print(f"-> {e}")
             sys.exit(2)

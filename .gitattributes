@@ -1,0 +1,7 @@
+# Keep LF so `opa fmt --fail` passes in CI regardless of the author's OS
+*.rego text eol=lf
+*.json text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
